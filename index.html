@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#08150f">
+  <meta name="description" content="单机单挑德州扑克，玩家对战三档难度 AI。标准无限注规则、牌型判定、全下与摊牌。">
+  <title>单挑德扑 · Heads-Up Hold'em</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1d14'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' fill='%23d6b36a'%3E%E2%99%A0%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <div class="ambient" aria-hidden="true">
+      <span class="ambient-suit suit-a">♠</span>
+      <span class="ambient-suit suit-b">♥</span>
+      <span class="ambient-suit suit-c">♦</span>
+      <span class="ambient-suit suit-d">♣</span>
+      <span class="ambient-glow glow-a"></span>
+      <span class="ambient-glow glow-b"></span>
+    </div>
+
+    <!-- ================= LOBBY ================= -->
+    <section id="lobby" class="screen lobby-screen is-active" aria-label="开始游戏">
+      <header class="lobby-header">
+        <div class="mini-brand">
+          <span class="brand-mark">♠</span>
+          <span class="mini-brand-copy">单挑德扑<small>HEADS-UP HOLD'EM</small></span>
+        </div>
+        <button id="lobbyRulesBtn" class="text-button" type="button">规则与牌型</button>
+      </header>
+
+      <main class="lobby-main">
+        <div class="lobby-hero">
+          <div class="eyebrow"><span class="eyebrow-line"></span> SINGLE TABLE · NO LIMIT</div>
+          <h1>一对一，<br><em>赢下整张桌子。</em></h1>
+          <p class="hero-copy">标准无限注德州扑克。你与一位 AI 单挑，庄家按钮和小盲每手轮换——读牌面，也读对手。</p>
+          <div class="hero-tags">
+            <span>52 张牌</span>
+            <span>无限注</span>
+            <span>三档 AI</span>
+            <span>单机离线</span>
+          </div>
+          <div class="hero-hand" aria-hidden="true">
+            <div class="hero-card hero-card-back"><span>♠</span></div>
+            <div class="hero-card hero-card-front">
+              <span class="hero-rank">A</span><span class="hero-suit">♠</span>
+              <b>♠</b>
+            </div>
+          </div>
+        </div>
+
+        <div class="lobby-panel">
+          <div class="panel-heading">
+            <span class="panel-kicker">SELECT OPPONENT</span>
+            <h2>选择你的对手</h2>
+          </div>
+          <div class="difficulty-grid" role="group" aria-label="AI 难度">
+            <button class="difficulty-card" type="button" data-difficulty="easy" aria-pressed="false">
+              <span class="diff-top"><span class="diff-index">01</span><span class="diff-bars"><i></i><i></i><i></i></span></span>
+              <span class="diff-title">简单</span>
+              <span class="diff-name">新手小柯</span>
+              <span class="diff-desc">跟注偏多，极少诈唬。适合先熟悉下注轮与牌型。</span>
+              <span class="diff-tag">松而被动</span>
+            </button>
+            <button class="difficulty-card is-selected" type="button" data-difficulty="medium" aria-pressed="true">
+              <span class="diff-top"><span class="diff-index">02</span><span class="diff-bars"><i></i><i></i><i></i></span></span>
+              <span class="diff-title">中等</span>
+              <span class="diff-name">牌桌老手</span>
+              <span class="diff-desc">会算底池赔率，按牌面调整下注，偶尔用听牌半诈唬。</span>
+              <span class="diff-tag">稳健施压</span>
+            </button>
+            <button class="difficulty-card" type="button" data-difficulty="hard" aria-pressed="false">
+              <span class="diff-top"><span class="diff-index">03</span><span class="diff-bars"><i></i><i></i><i></i></span></span>
+              <span class="diff-title">困难</span>
+              <span class="diff-name">冷面算法</span>
+              <span class="diff-desc">模拟胜率并收紧你的范围，会针对弃牌率调整诈唬频率。</span>
+              <span class="diff-tag">范围平衡</span>
+            </button>
+          </div>
+          <button id="startBtn" class="primary-button start-button" type="button">
+            <span>入座开局</span><span class="button-arrow">→</span>
+          </button>
+          <div class="table-specs">
+            <span>起始筹码 <b>1,000</b></span>
+            <span>盲注 <b>10 / 20</b></span>
+            <span>每 10 手上涨</span>
+          </div>
+        </div>
+      </main>
+
+      <footer class="lobby-footer">
+        <span>标准无限注 · 单挑规则</span>
+        <span class="footer-mark">♠ ♥ ♦ ♣</span>
+        <span>无需联网 · 进度不保存</span>
+      </footer>
+    </section>
+
+    <!-- ================= GAME ================= -->
+    <section id="game" class="screen game-screen" aria-label="牌桌">
+      <header class="game-header">
+        <div class="game-brand">
+          <span class="brand-mark small">♠</span>
+          <span class="game-brand-copy">单挑德扑<small>HEADS-UP</small></span>
+        </div>
+        <div class="game-meta">
+          <div class="meta-chip"><span>盲注</span><b id="blindDisplay">10 / 20</b></div>
+          <div class="meta-chip"><span>手数</span><b id="handDisplay">1</b></div>
+          <div class="difficulty-pill" id="difficultyPill"><i></i><span>中等</span></div>
+        </div>
+        <div class="header-actions">
+          <button id="soundBtn" class="icon-button" type="button" aria-label="关闭声音" title="声音">
+            <svg class="icon-sound-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/></svg>
+            <svg class="icon-sound-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="m17 9 4 6M21 9l-4 6"/></svg>
+          </button>
+          <button id="helpBtn" class="icon-button" type="button" aria-label="查看规则" title="规则与牌型">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.3 2.3 0 1 1 3.5 2c-.9.5-1.3 1-1.3 2.1"/><path d="M12 17h.01"/></svg>
+          </button>
+          <button id="leaveBtn" class="text-button leave-button" type="button">离桌</button>
+        </div>
+      </header>
+
+      <main class="game-main">
+        <section class="table-area">
+          <div class="table-stage">
+            <div class="table-felt" id="tableFelt">
+              <div class="felt-weave" aria-hidden="true"></div>
+              <div class="table-watermark" aria-hidden="true">♠ <span>DSH</span> ♠</div>
+
+              <div class="seat ai-seat" id="aiSeat">
+                <div class="seat-inner">
+                  <div class="seat-cards ai-cards" id="aiCards" aria-label="AI 手牌"></div>
+                  <div class="seat-plate">
+                    <div class="avatar ai-avatar" aria-hidden="true">
+                      <svg viewBox="0 0 64 64"><path d="M14 24h36v19a8 8 0 0 1-8 8H22a8 8 0 0 1-8-8V24z"/><path d="M19 24V17a5 5 0 0 1 5-5h16a5 5 0 0 1 5 5v7"/><circle cx="25" cy="36" r="3.5"/><circle cx="39" cy="36" r="3.5"/><path d="M27 45h10"/><path d="M11 30H6M58 30h-5"/></svg>
+                    </div>
+                    <div class="seat-copy">
+                      <div class="seat-name-row">
+                        <strong id="aiName">牌桌老手</strong>
+                        <span class="seat-badge" id="aiBadge">BB</span>
+                      </div>
+                      <div class="seat-stack"><i class="chip-dot"></i><span id="aiStack">1,000</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="seat-bet" id="aiBet" hidden></div>
+                <div class="action-bubble" id="aiBubble" hidden></div>
+                <div class="dealer-chip" id="aiDealer" hidden>D</div>
+              </div>
+
+              <div class="table-center">
+                <div class="pot-display">
+                  <div class="pot-chips" aria-hidden="true"><i></i><i></i><i></i></div>
+                  <div class="pot-copy"><span>底池 POT</span><strong id="potAmount">0</strong></div>
+                </div>
+                <div class="board" id="board" aria-label="公共牌"></div>
+                <div class="street-label" id="streetLabel">等待发牌</div>
+              </div>
+
+              <div class="seat player-seat" id="playerSeat">
+                <div class="seat-inner">
+                  <div class="seat-cards player-cards" id="playerCards" aria-label="你的手牌"></div>
+                  <div class="seat-plate">
+                    <div class="avatar player-avatar" aria-hidden="true">
+                      <svg viewBox="0 0 64 64"><circle cx="32" cy="23" r="10"/><path d="M14 54c1-12 8-18 18-18s17 6 18 18"/><path d="M23 22c1 5 4 8 9 8s8-3 9-8"/></svg>
+                    </div>
+                    <div class="seat-copy">
+                      <div class="seat-name-row">
+                        <strong>你</strong>
+                        <span class="seat-badge" id="playerBadge">SB</span>
+                      </div>
+                      <div class="seat-stack"><i class="chip-dot"></i><span id="playerStack">1,000</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="seat-bet" id="playerBet" hidden></div>
+                <div class="action-bubble" id="playerBubble" hidden></div>
+                <div class="dealer-chip" id="playerDealer" hidden>D</div>
+              </div>
+
+              <div class="deck-stack" aria-hidden="true"><i></i><i></i><i></i></div>
+            </div>
+          </div>
+
+          <div class="under-table">
+            <div class="table-status">
+              <span class="status-dot" id="statusDot"></span>
+              <div class="status-copy">
+                <strong id="tableMessage" aria-live="polite">准备开始</strong>
+                <small id="playerHint">庄家按钮位兼小盲，翻牌前先行动</small>
+              </div>
+            </div>
+            <div class="controls" id="controls" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <section class="side-card info-card">
+            <header class="side-heading">
+              <h2>牌局信息</h2>
+              <span class="phase-pill" id="phasePill">等待</span>
+            </header>
+            <div class="info-grid">
+              <div><span>盲注</span><b id="infoBlinds">10 / 20</b></div>
+              <div><span>本手</span><b id="infoHand">#1</b></div>
+              <div><span>按钮</span><b id="infoButton">—</b></div>
+              <div><span>本场</span><b id="infoRecord">0 胜 · 0 负</b></div>
+            </div>
+            <div class="rank-panel">
+              <span class="rank-label">你的牌力</span>
+              <strong id="rankHint">等待发牌</strong>
+              <span class="draw-hint" id="drawHint"></span>
+              <div class="pot-odds" id="potOddsHint"></div>
+            </div>
+          </section>
+
+          <section class="side-card log-card">
+            <header class="side-heading">
+              <h2>行动记录</h2>
+              <span class="log-hand" id="logTag">#1</span>
+            </header>
+            <div class="log-list" id="logList" aria-live="polite"></div>
+          </section>
+        </aside>
+      </main>
+    </section>
+
+    <!-- ================= RESULT ================= -->
+    <div id="resultOverlay" class="overlay" hidden>
+      <div class="confetti" id="confetti" aria-hidden="true"></div>
+      <div class="result-card" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+        <div class="result-kicker" id="resultKicker">本手结束</div>
+        <div class="result-emblem" id="resultEmblem">♠</div>
+        <h2 id="resultTitle">你赢了</h2>
+        <p id="resultSubtitle"></p>
+        <div class="result-hands" id="resultHands"></div>
+        <div class="result-pot-row">
+          <span>底池</span><strong id="resultPot">0</strong><em id="resultNet"></em>
+        </div>
+        <div class="result-actions">
+          <button id="resultContinue" class="primary-button" type="button">下一手</button>
+          <button id="resultView" class="ghost-button" type="button">查看牌桌</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MODALS ================= -->
+    <div id="modalLayer" class="modal-layer" hidden>
+      <div class="modal-backdrop" data-close-modal="true"></div>
+
+      <div class="modal rules-modal" id="rulesModal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle" hidden>
+        <header class="modal-header">
+          <div><span class="modal-kicker">RULES &amp; HAND RANKINGS</span><h2 id="rulesTitle">标准单挑规则</h2></div>
+          <button class="modal-close" type="button" data-close-modal="true" aria-label="关闭">×</button>
+        </header>
+        <div class="modal-scroll">
+          <div class="rule-points">
+            <div><b>01</b><span>每人两张底牌，五张公共牌，用任意七张中最好的五张组成牌型。</span></div>
+            <div><b>02</b><span>四个下注轮：翻牌前、翻牌、转牌、河牌。每轮可过牌、跟注、加注或弃牌。</span></div>
+            <div><b>03</b><span>单挑时按钮位兼小盲：翻牌前先行动，翻牌后最后行动。下一手按钮轮换。</span></div>
+            <div><b>04</b><span>无限注：每次加注至少为上一次加注的增量；筹码不足时可全下。</span></div>
+            <div><b>05</b><span>摊牌时牌型更大者赢得底池；完全相同则平分，奇数筹码给非按钮位。</span></div>
+            <div><b>06</b><span>每 10 手盲注上涨。一方筹码归零，比赛结束。</span></div>
+          </div>
+          <h3 class="ranking-title">牌型从大到小</h3>
+          <ol class="hand-ranking">
+            <li><span>皇家同花顺</span><em>A K Q J 10，同一花色</em></li>
+            <li><span>同花顺</span><em>五张同花色的连续牌</em></li>
+            <li><span>四条</span><em>四张同点数牌</em></li>
+            <li><span>葫芦</span><em>三条 + 一对</em></li>
+            <li><span>同花</span><em>五张同一花色</em></li>
+            <li><span>顺子</span><em>五张连续点数</em></li>
+            <li><span>三条</span><em>三张同点数牌</em></li>
+            <li><span>两对</span><em>两个不同点数的对子</em></li>
+            <li><span>一对</span><em>两张同点数牌</em></li>
+            <li><span>高牌</span><em>以上皆无，比较最大单牌</em></li>
+          </ol>
+          <div class="rules-note">小提示：A 可作最大牌，也可在 A-2-3-4-5 中作最小顺子。点击“离桌”可随时结束本场。</div>
+        </div>
+      </div>
+
+      <div class="modal confirm-modal" id="leaveModal" role="dialog" aria-modal="true" aria-labelledby="leaveTitle" hidden>
+        <div class="confirm-icon">♠</div>
+        <h2 id="leaveTitle">离开这张牌桌？</h2>
+        <p>当前对局进度不会保存，返回大厅后可以重新选择难度。</p>
+        <div class="confirm-actions">
+          <button id="leaveCancel" class="ghost-button" type="button">继续游戏</button>
+          <button id="leaveConfirm" class="danger-button" type="button">确认离桌</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="js/poker.js"></script>
+  <script src="js/table.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
