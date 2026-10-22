@@ -31,7 +31,8 @@
       preflopOpen: 8.7,
       preflopCall: 3.4,
       preflopThreeBet: 13.2,
-      preflopCallRaise: 6.6,
+      preflopCallRaise: 5.5,
+      preflopDefense: 1.8,
       preflopBbRaise: 9.4,
       preflopSteal: 4.6,
       preflopStealFreq: 0.12,
@@ -62,7 +63,8 @@
       preflopOpen: 9.4,
       preflopCall: 5.6,
       preflopThreeBet: 12.0,
-      preflopCallRaise: 7.8,
+      preflopCallRaise: 6.1,
+      preflopDefense: 2.0,
       preflopBbRaise: 8.4,
       preflopSteal: 5.2,
       preflopStealFreq: 0.30,
@@ -94,7 +96,8 @@
       preflopOpen: 9.4,
       preflopCall: 5.6,
       preflopThreeBet: 11.8,
-      preflopCallRaise: 7.8,
+      preflopCallRaise: 5.8,
+      preflopDefense: 2.4,
       preflopBbRaise: 8.4,
       preflopSteal: 5.2,
       preflopStealFreq: 0.38,
@@ -254,7 +257,19 @@
         const raise = preflopRaiseSize(ctx, rng);
         if (raise) return raise;
       }
-      if (score >= profile.preflopCallRaise) return actionCallOrCheck(ctx);
+
+      // Defend the big blind much wider against small opens. A minimum raise
+      // lays a good price and the big blind closes the preflop action; folding
+      // 80%+ of hands here lets a player min-raise every button profitably.
+      const raiseBb = ctx.currentBet / bb;
+      const defenseDiscount = !isButton ? (profile.preflopDefense || 0) : 0;
+      const sizePenalty = Math.max(0, raiseBb - 2) * 0.55;
+      let callThreshold = profile.preflopCallRaise - defenseDiscount + sizePenalty;
+      if (profile.key === 'hard') {
+        const tendencies = playerTendencies(ctx.playerStats);
+        if (tendencies.aggression > 0.38) callThreshold -= 0.5;
+      }
+      if (score >= Math.max(2.2, callThreshold)) return actionCallOrCheck(ctx);
       return actionFold();
     }
 
