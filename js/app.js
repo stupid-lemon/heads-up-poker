@@ -50,7 +50,15 @@
       calls: 0,
       facedBet: 0,
       foldsToBet: 0,
-      callsToBet: 0
+      callsToBet: 0,
+      preflopActions: 0,
+      preflopRaises: 0,
+      postflopActions: 0,
+      postflopBets: 0,
+      postflopRaises: 0,
+      allInActions: 0,
+      preflopAllInActions: 0,
+      aggressiveActions: 0
     };
   }
 
@@ -612,6 +620,7 @@
 
       const phase = this.table.phase;
       const toCall = legal.toCall;
+      const wasOpen = this.table.currentBet === 0;
       let action;
       if (type === 'raise') {
         let target = Number(amount);
@@ -631,7 +640,7 @@
         return;
       }
 
-      this.updatePlayerStats(type, toCall, phase);
+      this.updatePlayerStats(type, toCall, phase, legal, action.amount, wasOpen);
       this.recordLastAction('player');
       this.playActionSound(type, action.amount, legal);
       this.actionPending = false;
@@ -648,12 +657,25 @@
       }
     }
 
-    updatePlayerStats(type, toCall, phase) {
+    updatePlayerStats(type, toCall, phase, legal, amount, wasOpen) {
       const stats = this.playerStats;
       stats.actions++;
+      if (phase === 'preflop') {
+        stats.preflopActions++;
+        if (type === 'raise') stats.preflopRaises++;
+      } else {
+        stats.postflopActions++;
+        if (type === 'raise') stats.postflopRaises++;
+        if (type === 'raise' && wasOpen) stats.postflopBets++;
+      }
       if (type === 'raise') {
         stats.raises++;
+        stats.aggressiveActions++;
         if (phase === 'preflop') this.playerRaisedPreflop = true;
+        if (legal && legal.raise && amount >= legal.raise.max) {
+          stats.allInActions++;
+          if (phase === 'preflop') stats.preflopAllInActions++;
+        }
       } else if (type === 'fold') {
         stats.folds++;
       } else if (type === 'check') {

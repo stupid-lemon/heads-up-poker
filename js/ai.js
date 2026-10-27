@@ -63,8 +63,8 @@
       preflopOpen: 9.4,
       preflopCall: 5.6,
       preflopThreeBet: 12.0,
-      preflopCallRaise: 6.1,
-      preflopDefense: 2.0,
+      preflopCallRaise: 5.7,
+      preflopDefense: 2.1,
       preflopBbRaise: 8.4,
       preflopSteal: 5.2,
       preflopStealFreq: 0.30,
@@ -176,11 +176,30 @@
     const foldToBet = sample >= 5 ? (s.foldsToBet || 0) / sample : 0.42;
     const callToBet = sample >= 5 ? (s.callsToBet || 0) / sample : 0.40;
     const aggression = s.actions ? (s.raises || 0) / s.actions : 0.20;
+
+    const preflopSample = s.preflopActions || 0;
+    const postflopSample = s.postflopActions || 0;
+    const preflopAggression = preflopSample >= 4 ? (s.preflopRaises || 0) / preflopSample : 0.20;
+    const postflopAggression = postflopSample >= 4 ? (s.postflopRaises || 0) / postflopSample : 0.20;
+    const allInRate = preflopSample >= 4 ? (s.preflopAllInActions || 0) / preflopSample : 0;
+
+    // A player who shoves, min-raises, or bets nearly every opportunity is
+    // not representing a premium range. Treat that as a wide/maniac range.
+    const shovey = (preflopSample >= 4 && allInRate >= 0.30) ||
+      (preflopSample >= 8 && preflopAggression >= 0.58) ||
+      (postflopSample >= 8 && postflopAggression >= 0.58);
+
     return {
       foldToBet: clamp(foldToBet, 0, 1),
       callToBet: clamp(callToBet, 0, 1),
       aggression: clamp(aggression, 0, 1),
-      sample
+      preflopAggression: clamp(preflopAggression, 0, 1),
+      postflopAggression: clamp(postflopAggression, 0, 1),
+      allInRate: clamp(allInRate, 0, 1),
+      shovey,
+      sample,
+      preflopSample,
+      postflopSample
     };
   }
 
@@ -193,14 +212,19 @@
   function opponentRangeCutoff(profile, ctx, tendencies) {
     if (profile.key === 'easy') return 0;
     if (profile.key === 'medium') {
-      if (ctx.playerRaisedPreflop) return 5;
+      if (tendencies.shovey) return 0;
+      if (ctx.playerRaisedPreflop) return 4;
       if (ctx.toCall > 0 && ctx.phase !== 'preflop') return 3;
       return 0;
     }
+
+    // A player who keeps betting/shoving is representing a wide range, not
+    // the premium range that a fixed cutoff would imply.
+    if (tendencies.shovey) return 1;
     let cutoff = profile.opponentMinChen || 0;
-    if (ctx.playerRaisedPreflop) cutoff = Math.max(cutoff, 7);
-    if (ctx.toCall > 0 && ctx.phase !== 'preflop') cutoff = Math.max(cutoff, 5);
-    if (tendencies.aggression > 0.32) cutoff = Math.max(cutoff, 6);
+    if (ctx.playerRaisedPreflop) cutoff = Math.max(cutoff, 6);
+    if (ctx.toCall > 0 && ctx.phase !== 'preflop') cutoff = Math.max(cutoff, 4);
+    if (tendencies.preflopAggression > 0.40) cutoff = Math.max(cutoff, 5);
     return cutoff;
   }
 
@@ -215,22 +239,29 @@
     const facingRaise = ctx.currentBet > bb;
     const facingAllIn = toCall > 0 && !legal.canRaise;
     const allInCall = toCall >= ctx.stack;
+    const tendencies = playerTendencies(ctx.playerStats);
 
     if (allInCall || facingAllIn) {
+      const odds = toCall / (ctx.pot + toCall);
       if (profile.useAllInEquity) {
-        const odds = toCall / (ctx.pot + toCall);
-        const cutoff = 8;
+        // Against a shove-heavy opponent, use a very wide range. Against an
+        // unknown/tight shover, keep the premium-range assumption.
+        const cutoff = tendencies.shovey ? 0 : 7;
         const sims = Math.min(profile.preflopSamples || 300, 460);
         const equity = P.estimateEquity(ctx.hole, [], {
           iterations: sims,
           rng,
           opponentMinChen: cutoff
         }).equity;
-        const adjusted = equity - profile.rangePenalty;
-        if (adjusted >= odds + profile.callMargin - 0.01) return actionCallOrCheck(ctx);
+        const adjusted = equity - (tendencies.shovey ? 0 : profile.rangePenalty);
+        const margin = tendencies.shovey ? -0.01 : profile.callMargin - 0.01;
+        if (adjusted >= odds + margin) return actionCallOrCheck(ctx);
         return actionFold();
       }
-      if (chen >= profile.allInChen) return actionCallOrCheck(ctx);
+      // Easy opponent still needs a baseline, but it should not fold forever
+      // against someone who open-shoves every hand.
+      const threshold = tendencies.shovey ? 4.0 : profile.allInChen;
+      if (chen >= threshold) return actionCallOrCheck(ctx);
       return actionFold();
     }
 
@@ -265,10 +296,8 @@
       const defenseDiscount = !isButton ? (profile.preflopDefense || 0) : 0;
       const sizePenalty = Math.max(0, raiseBb - 2) * 0.55;
       let callThreshold = profile.preflopCallRaise - defenseDiscount + sizePenalty;
-      if (profile.key === 'hard') {
-        const tendencies = playerTendencies(ctx.playerStats);
-        if (tendencies.aggression > 0.38) callThreshold -= 0.5;
-      }
+      if (tendencies.shovey) callThreshold -= 0.8;
+      else if (tendencies.preflopAggression > 0.45) callThreshold -= 0.4;
       if (score >= Math.max(2.2, callThreshold)) return actionCallOrCheck(ctx);
       return actionFold();
     }
@@ -323,26 +352,35 @@
     // Opponent's betting range is stronger than a random hand. Harder
     // opponents account for this and also exploit clear player leaks.
     let penalty = 0;
-    if (ctx.toCall > 0) penalty += profile.rangePenalty;
-    if (ctx.playerRaisedPreflop) penalty += profile.rangePenalty * 0.55;
-    if (profile.key === 'hard') {
-      if (tendencies.aggression > 0.3) penalty += 0.008;
-      if (tendencies.foldToBet > 0.58) penalty -= 0.006;
-      if (tendencies.callToBet > 0.64) penalty += 0.008;
+    if (!tendencies.shovey) {
+      if (ctx.toCall > 0) penalty += profile.rangePenalty;
+      if (ctx.playerRaisedPreflop) penalty += profile.rangePenalty * 0.55;
+      if (profile.key === 'hard') {
+        if (tendencies.aggression > 0.3) penalty += 0.006;
+        if (tendencies.foldToBet > 0.58) penalty -= 0.006;
+        if (tendencies.callToBet > 0.64) penalty += 0.008;
+      }
+    } else {
+      penalty -= 0.006;
     }
     equity = clamp(equity - penalty, 0.01, 0.99);
 
     const pot = ctx.pot;
     const toCall = ctx.toCall;
     const potOdds = toCall > 0 ? toCall / (pot + toCall) : 0;
-    const implied = draw.draw ? (profile.key === 'hard' ? 0.035 : profile.key === 'medium' ? 0.022 : 0) : 0;
-    const callThreshold = potOdds + profile.callMargin - implied;
+    const facingAllIn = toCall > 0 && !legal.canRaise;
+    const implied = facingAllIn ? 0 : (draw.draw ? (profile.key === 'hard' ? 0.035 : profile.key === 'medium' ? 0.022 : 0) : 0);
+    const margin = tendencies.shovey ? Math.min(profile.callMargin, -0.01) : profile.callMargin;
+    const callThreshold = potOdds + margin - implied;
     const canRaise = !!legal.canRaise;
 
     // Exploit a player who folds too often; bluff less against a station.
     let bluffChance = profile.bluff;
     let valueThreshold = profile.valueBet;
-    if (profile.key === 'hard') {
+    if (tendencies.shovey) {
+      bluffChance -= 0.055;
+      valueThreshold -= profile.key === 'hard' ? 0.025 : 0;
+    } else if (profile.key === 'hard') {
       if (tendencies.sample >= 5 && tendencies.foldToBet > 0.58) bluffChance += 0.09;
       if (tendencies.sample >= 5 && tendencies.callToBet > 0.62) {
         bluffChance -= 0.07;
